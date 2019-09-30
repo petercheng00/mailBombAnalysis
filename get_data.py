@@ -91,7 +91,7 @@ def main():
                 reply_to = h['value']
             elif h['name'] == 'Subject':
                 subject = h['value']
-                data.append([epoch_ms, fromx, reply_to, subject])
+        data.append([epoch_ms, fromx, reply_to, subject])
 
     # Batching requests is faster
     batcher = service.new_batch_http_request()
@@ -105,7 +105,7 @@ def main():
     # Handle last set
     batcher.execute()
 
-    with open('data.csv', 'w') as f:
+    with open('data2.csv', 'w') as f:
         writer = csv.writer(f)
         writer.writerows(data)
 
