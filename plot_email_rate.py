@@ -28,8 +28,9 @@ plt.margins(x=0)
 plt.gca().xaxis.set_major_formatter(
     mtick.FuncFormatter(lambda ms, _: time.strftime("%m-%d",time.localtime(ms/1000)))
 )
+plt.gca().tick_params(axis = 'both', which = 'major', labelsize = 24)
 
-plt.ylabel('Emails/hour (log scale)', fontsize=20)
-plt.xlabel('Hour', fontsize=20)
+plt.ylabel('Emails/hour (log scale)', fontsize=24)
+plt.xlabel('Hour', fontsize=24)
 plt.title('Spam Emails/Hour in August', fontsize=30)
 plt.show()
