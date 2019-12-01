@@ -1,7 +1,9 @@
+import base64
 import csv
 import datetime
 import pickle
 import os.path
+from html.parser import HTMLParser
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -11,9 +13,25 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 DEBUG = False
 
-def epochMsToDateTime(epoch_ms):
-    return datetime.datetime.fromtimestamp(epoch_ms/1000).strftime('%Y-%m-%d %H:%M:%S.%f')
+class UnsubLinkParser(HTMLParser):
+    a_href = ''
+    unsub_links = []
 
+    def handle_starttag(self, tag, attrs):
+        if tag == 'a':
+            for attr in attrs:
+                if attr[0] == 'href':
+                    self.a_href = attr[1]
+                    break
+
+    def handle_endtag(self, tag):
+        if tag == 'a':
+            self.a_href = ''
+
+    def handle_data(self, data):
+        if self.a_href != '' and 'unsubscribe' in data.lower():
+            self.unsub_links.append(self.a_href)
+            self.a_href = ''
 
 def getMessagesWithLabels(service, user_id, label_ids):
     response = service.users().messages().list(userId=user_id,
@@ -72,26 +90,19 @@ def main():
     min_messages = getMessagesWithLabels(service, 'me', [spam_label_id])
 
 
-    # The data we will gather
-    data = [['epoch_ms', 'from', 'reply-to', 'subject']]
+    parser = UnsubLinkParser()
 
     # The callback for each message
     def getMsgData(rid, message, exception):
         if exception is not None:
             return
-        epoch_ms = int(message['internalDate'])
-        fromx = ''
-        reply_to = ''
-        subject = ''
-        headers = message['payload']['headers']
-        for h in headers:
-            if h['name'] == 'From':
-                fromx = h['value']
-            elif h['name'] == 'Reply-To':
-                reply_to = h['value']
-            elif h['name'] == 'Subject':
-                subject = h['value']
-        data.append([epoch_ms, fromx, reply_to, subject])
+        try:
+            msg = next(m for m in message['payload']['parts'] if m['mimeType'] == 'text/html')
+        except:
+            return
+        msg_data = msg['body']['data']
+        msg_html = base64.urlsafe_b64decode(msg_data.encode('ASCII')).decode('utf-8')
+        parser.feed(msg_html)
 
     # Batching requests is faster
     batcher = service.new_batch_http_request()
@@ -100,14 +111,15 @@ def main():
             print(f'\rRequesting msg {i}', end='')
             batcher.execute()
             batcher = service.new_batch_http_request()
-        batcher.add(service.users().messages().get(userId='me', id=mm['id'], format='metadata'), callback=getMsgData)
+        batcher.add(service.users().messages().get(userId='me', id=mm['id'], format='full'), callback=getMsgData)
     print() # new line after carriage returns
     # Handle last set
     batcher.execute()
 
-    with open('data2.csv', 'w') as f:
-        writer = csv.writer(f)
-        writer.writerows(data)
+
+
+    with open('unsub_links.txt', 'w') as f:
+        f.writelines("%s\n" % ul for ul in parser.unsub_links)
 
 if __name__ == '__main__':
     main()
